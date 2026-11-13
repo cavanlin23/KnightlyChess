@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Knightly Chess</title>
+<style>
+:root{color-scheme:light dark;--bg:#f1f0ea;--pn:#fff;--tx:#1f1f1f;--mu:#6b6b6b;--ac:#4f8a1e;--bd:#ddd;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#262421;--pn:#312e2b;--tx:#f3f3f3;--mu:#a5a39f;--ac:#81b64c;--bd:#454340}}
+:root[data-theme="dark"]{--bg:#262421;--pn:#312e2b;--tx:#f3f3f3;--mu:#a5a39f;--ac:#81b64c;--bd:#454340}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--pn);border-bottom:1px solid var(--bd)}
+.logo{font-weight:800;font-size:20px}.logo b{color:var(--ac)}
+.chip{display:flex;gap:8px;align-items:center;font-weight:600}
+.elo{background:var(--ac);color:#fff;border-radius:6px;padding:1px 8px;font-size:13px}
+main{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;padding:18px}
+.bw{--s:min(92vw,min(560px,78vh));width:var(--s);flex:none}
+.bd{width:var(--s);height:var(--s);display:grid;grid-template:repeat(8,minmax(0,1fr))/repeat(8,minmax(0,1fr));border-radius:6px;overflow:hidden;box-shadow:0 4px 18px #0004}
+.bd.idle{opacity:.55}
+.s{min-width:0;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;font-size:calc(var(--s)/8*.82);line-height:1;user-select:none}
+.s.l{background:#eeeed2}.s.d{background:#769656}
+.s.lm{box-shadow:inset 0 0 0 100px #f7ec5a88}.s.se{box-shadow:inset 0 0 0 100px #f7ec5acc}
+.s.tg::after{content:"";width:28%;height:28%;border-radius:50%;background:#0003;position:absolute}
+.s.cp::after{content:"";position:absolute;inset:4%;border-radius:50%;border:5px solid #0003}
+.s i{font-style:normal;position:relative;z-index:1}
+i.w{color:#fff;text-shadow:0 0 2px #000,0 0 3px #000,0 1px 1px #000}
+i.b{color:#222;text-shadow:0 0 1px #fff,0 0 2px #ccc}
+.pc{display:flex;justify-content:space-between;align-items:center;padding:8px 4px;font-weight:600}
+.side{width:min(92vw,340px);display:flex;flex-direction:column;gap:12px}
+.card{background:var(--pn);border:1px solid var(--bd);border-radius:10px;padding:14px}
+.tabs{display:flex;gap:4px;margin-bottom:12px}
+.tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;color:var(--mu);padding:6px;font:inherit;font-weight:600;cursor:pointer}
+.tabs button.on{color:var(--tx);border-color:var(--ac)}
+.btn{display:block;width:100%;box-sizing:border-box;background:var(--ac);color:#fff;border:0;border-radius:8px;padding:12px;font:inherit;font-weight:700;font-size:16px;cursor:pointer;margin-top:8px}
+.btn.g{background:none;color:var(--tx);border:1px solid var(--bd)}
+.btn.sm{display:inline-block;width:auto;padding:4px 10px;font-size:13px;margin:0 0 0 4px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bd)}
+.row:last-child{border:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#999;margin-right:6px}.dot.on{background:var(--ac)}
+input{width:100%;box-sizing:border-box;padding:9px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:inherit}
+.mu{color:var(--mu);font-size:13px}.st{font-weight:700;font-size:17px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#000c;color:#fff;padding:8px 16px;border-radius:20px}
+.ct{max-width:380px;margin:60px auto;text-align:center}
+</style></head><body>
+<header><div class="logo">♞ Knight<b>ly</b></div><div class="chip" id="me"></div></header>
+<main id="app"><div class="ct">Connecting…</div></main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>"&#"+c.charCodeAt(0)+";");
+const START="rnbqkbnrpppppppp................................PPPPPPPPRNBQKBNR";
+const GL={k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"},VAL={p:1,n:3,b:3,r:5,q:9,k:0};
+const col=c=>c===c.toUpperCase()?"w":"b";
+const DI={b:[[1,1],[1,-1],[-1,1],[-1,-1]],r:[[1,0],[-1,0],[0,1],[0,-1]]};DI.q=DI.b.concat(DI.r);
+const KN=[[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]];
+const ins=(r,f)=>r>=0&&r<8&&f>=0&&f<8;
+function att(B,s,by){const r=s>>3,f=s&7,x=c=>by==="w"?c.toUpperCase():c,dr=by==="w"?1:-1;
+ for(const a of[-1,1])if(ins(r+dr,f+a)&&B[(r+dr)*8+f+a]===x("p"))return true;
+ for(const[a,b]of KN)if(ins(r+a,f+b)&&B[(r+a)*8+f+b]===x("n"))return true;
+ for(let a=-1;a<2;a++)for(let b=-1;b<2;b++)if((a||b)&&ins(r+a,f+b)&&B[(r+a)*8+f+b]===x("k"))return true;
+ for(const k of["b","r"])for(const[a,b]of DI[k]){let y=r+a,z=f+b;while(ins(y,z)){const q=B[y*8+z];if(q!=="."){if(q===x(k)||q===x("q"))return true;break}y+=a;z+=b}}
+ return false}
+function gen(S){const B=S.b,t=S.t,o=[];
+ for(let i=0;i<64;i++){const p=B[i];if(p==="."||col(p)!==t)continue;const r=i>>3,f=i&7,u=p.toLowerCase();
+  const add=(y,z)=>{if(!ins(y,z))return false;const j=y*8+z,q=B[j];if(q!=="."&&col(q)===t)return false;o.push([i,j]);return q==="."};
+  if(u==="p"){const d=t==="w"?-1:1;
+   if(B[(r+d)*8+f]==="."){o.push([i,(r+d)*8+f]);if(r===(t==="w"?6:1)&&B[(r+2*d)*8+f]===".")o.push([i,(r+2*d)*8+f])}
+   for(const a of[-1,1])if(ins(r+d,f+a)){const j=(r+d)*8+f+a,q=B[j];if((q!=="."&&col(q)!==t)||j===S.e)o.push([i,j])}}
+  else if(u==="n")KN.forEach(([a,b])=>add(r+a,f+b));
+  else if(u==="k"){for(let a=-1;a<2;a++)for(let b=-1;b<2;b++)if(a||b)add(r+a,f+b);
+   const h=t==="w"?56:0,op=t==="w"?"b":"w",K=t==="w"?"K":"k",Q=t==="w"?"Q":"q";
+   if(i===h+4&&!att(B,i,op)){
+    if(S.c.includes(K)&&B[h+5]==="."&&B[h+6]==="."&&!att(B,h+5,op)&&!att(B,h+6,op))o.push([i,h+6]);
+    if(S.c.includes(Q)&&B[h+3]==="."&&B[h+2]==="."&&B[h+1]==="."&&!att(B,h+3,op)&&!att(B,h+2,op))o.push([i,h+2])}}
+  else DI[u].forEach(([a,b])=>{let y=r+a,z=f+b;while(add(y,z)){y+=a;z+=b}})}
+ return o}
+function ap(S,[a,b]){const B=S.b.slice(),p=B[a],u=p.toLowerCase();let c=S.c,e=-1;
+ if(u==="p"&&b===S.e)B[b+(S.t==="w"?8:-8)]=".";
+ B[b]=p;B[a]=".";
+ if(u==="p"&&(b>>3===0||b>>3===7))B[b]=S.t==="w"?"Q":"q";
+ if(u==="p"&&Math.abs(b-a)===16)e=(a+b)/2;
+ if(u==="k"&&Math.abs(b-a)===2){const rf=b>a?b+1:b-2,rt=b>a?b-1:b+1;B[rt]=B[rf];B[rf]="."}
+ for(const s of[a,b]){const m={60:"KQ",4:"kq",63:"K",56:"Q",7:"k",0:"q"}[s];if(m)for(const ch of m)c=c.replace(ch,"")}
+ return{b:B,t:S.t==="w"?"b":"w",c,e}}
+function legal(S){return gen(S).filter(m=>{const N=ap(S,m);return!att(N.b,N.b.indexOf(S.t==="w"?"K":"k"),N.t)})}
+const toS=g=>({b:g.bd.split(""),t:g.t,c:g.c,e:g.e});
+
+let me=null,authed=false,acct,aU="",aerr="",P={},Q={},G=null,gref=null,unsub=null,sel=null,tab="play",qs=null,qt=null,ch=null,online=new Set(),msg="",dl=null,boot="Connecting…";
+let db,room,qr,pr,gr;const applied=new Set();
+const setErr=m=>{aerr=m;R()};
+async function hp(pw,salt){const E=new TextEncoder(),k=await crypto.subtle.importKey("raw",E.encode(pw),"PBKDF2",false,["deriveBits"]);const b=await crypto.subtle.deriveBits({name:"PBKDF2",salt:E.encode(salt),iterations:1e5,hash:"SHA-256"},k,256);return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+const T=m=>{msg=m;R();setTimeout(()=>{msg="";R()},3500)};
+addEventListener("unhandledrejection",e=>T("Action failed: "+(e.reason?.code||"try again")));
+
+function R(){
+ const fv=$("#fs")?.value,ff=document.activeElement?.id==="fs";
+ if(!me){$("#app").innerHTML=`<div class="ct card"><h2>♞ Knightly</h2><p>${boot}</p>${boot.startsWith("Connecting")?"":`<a class="btn" style="text-decoration:none" href="https://claude.ai/login" target="_top">Log in with claude.ai</a>`}</div>`;return}
+ if(!authed){const k=(acct===undefined?"l":acct?"in":"up")+aerr;if($("#authbox")?.dataset.k===k)return;
+  let h="<p>Loading…</p>";
+  if(acct!==undefined)h=`<h2>${acct?"Welcome back, "+esc(acct.u):"Create your account"}</h2>`+(acct?"":`<input id="au" placeholder="Username" maxlength="16" autocomplete="username" value="${esc(aU)}"><div style="height:8px"></div>`)+`<input id="ap" type="password" placeholder="Password" autocomplete="${acct?"current-password":"new-password"}"><p class="mu" style="color:#c0392b">${esc(aerr)}</p><button class="btn" data-a="${acct?"login":"signup"}">${acct?"Log in":"Sign up"}</button>`+(acct?"":`<p class="mu">Username: 3–16 letters, numbers or underscores. Password: 6+ characters.</p>`);
+  $("#me").innerHTML="";$("#app").innerHTML=`<div class="ct card" id="authbox" data-k="${esc(k)}"><div class="logo">♞ Knight<b>ly</b></div>${h}</div>`;return}
+ const m=P[me]||{n:"You",elo:1200,w:0,l:0,d:0,f:[]},g=G,mc=g&&g.b===me?"b":"w";
+ $("#me").innerHTML=`${esc(m.n)} <span class="elo">${m.pl?m.elo:"?"}</span> <button class="btn sm g" data-a="logout">Log out</button>`;
+ const B=(g?g.bd:START).split("");let tg=[];
+ if(g&&sel!=null&&g.st==="active"&&g.t===mc)tg=legal(toS(g)).filter(x=>x[0]===sel).map(x=>x[1]);
+ const lm=g?.lm||[],ord=[...Array(64).keys()];if(mc==="b")ord.reverse();
+ const sq=ord.map(i=>{const p=B[i],r=i>>3,f=i&7;return`<div class="s ${(r+f)%2?"d":"l"}${lm.includes(i)?" lm":""}${sel===i?" se":""}${tg.includes(i)?(p!=="."?" cp":" tg"):""}" data-a="sq" data-v="${i}">${p==="."?"":`<i class="${col(p)}">${GL[p.toLowerCase()]}\uFE0E</i>`}</div>`}).join("");
+ const opp=g?(mc==="w"?[g.bn,g.bot?"":g.bE]:[g.wn,g.wE]):["Opponent","–"],mine=g?(mc==="w"?[g.wn,g.wE]:[g.bn,g.bE]):[m.n,m.pl?m.elo:"?"];
+ const pc=x=>`<div class="pc"><span>${esc(x[0])}</span>${x[1]===""?"":`<span class="elo">${x[1]}</span>`}</div>`;
+ let side="";
+ if(g){let st;
+  if(g.st==="done"){st=g.res==="d"?"Draw":g.res===mc?"You won":"You lost";st+=g.rs==="resign"?" by resignation":g.res==="d"?" (stalemate)":" by checkmate";if(dl!=null)st+=` · Elo ${dl>=0?"+":""}${dl}`;if(g.plc)st+=` · Your rating: ${g.pe||"…"}`}
+  else st=(g.t===mc?"Your move":"Opponent’s move")+(att(B,B.indexOf(g.t==="w"?"K":"k"),g.t==="w"?"b":"w")?" · Check!":"");
+  side=`<div class="card"><div class="st">${st}</div><div class="mu">${g.plc?"Placement game: the computer adapts to your level":g.rated?"Rated game":"Casual game, no Elo change"}</div>${g.st==="done"?`<button class="btn" data-a="lobby">Back to lobby</button>`:`<button class="btn g" data-a="resign">Resign</button>`}</div>`}
+ else{
+  let body="";
+  if(tab==="play")body=qs?`<p class="st">Searching for an opponent…</p><p class="mu">Matching players near ${m.elo} Elo. The range widens the longer you wait.</p><button class="btn g" data-a="cancel">Cancel</button>`
+   :`<button class="btn" data-a="play">Play online</button><button class="btn g" data-a="bot">Play computer</button><p class="mu">${m.w} wins · ${m.l} losses · ${m.d} draws${m.w+m.l+m.d<30?" · provisional rating until 30 games":""}</p>`;
+  if(tab==="friends"){const fl=m.f||[],q=(fv||"").toLowerCase().trim();
+   const res=q?Object.entries(P).filter(([u,x])=>u!==me&&!fl.includes(u)&&(x.n||"").toLowerCase().includes(q)).slice(0,5):[];
+   body=`<input id="fs" placeholder="Find players by name" value="${esc(fv||"")}">`+res.map(([u,x])=>`<div class="row"><span>${esc(x.n)} <span class="mu">${x.pl?x.elo:"?"}</span></span><button class="btn sm" data-a="add" data-v="${u}">Add</button></div>`).join("")
+   +`<div style="margin-top:10px">`+(fl.length?fl.map(u=>{const x=P[u]||{n:"Player",elo:"–"};return`<div class="row"><span><span class="dot ${online.has(u)?"on":""}"></span>${esc(x.n)} <span class="mu">${x.pl?x.elo:"?"}</span></span><span><button class="btn sm" data-a="chal" data-v="${u}">Challenge</button><button class="btn sm g" data-a="rm" data-v="${u}">✕</button></span></div>`}).join(""):`<p class="mu">No friends yet. Search by name above. Everyone who opens this page appears in search.</p>`)+`</div>`}
+  if(tab==="top")body=Object.entries(P).filter(x=>x[1].pl).sort((a,b)=>b[1].elo-a[1].elo).slice(0,10).map(([u,x],i)=>`<div class="row"><span>${i+1}. ${esc(x.n)}${u===me?" (you)":""}</span><b>${x.elo}</b></div>`).join("");
+  side=`<div class="card"><div class="tabs">${[["play","Play"],["friends","Friends"],["top","Ranking"]].map(([k,l])=>`<button class="${tab===k?"on":""}" data-a="tab" data-v="${k}">${l}</button>`).join("")}</div>${body}</div>`}
+ if(!g&&!m.pl)side=`<div class="card"><div class="st">Welcome to Knightly</div><p class="mu">Play one placement game against the computer. It adapts to how you play, then sets your starting rating.</p><button class="btn" data-a="bot" data-v="1">Start placement game</button></div>`;
+ if(ch&&!g&&m.pl)side=`<div class="card"><b>${esc(ch.fn)}</b> challenged you to a game.<button class="btn" data-a="acc">Accept</button><button class="btn g" data-a="dec">Decline</button></div>`+side;
+ $("#app").innerHTML=`<div class="bw">${pc(opp)}<div class="bd ${g?"":"idle"}">${sq}</div>${pc(mine)}</div><div class="side">${side}</div>${msg?`<div class="toast">${esc(msg)}</div>`:""}`;
+ if(ff){const i=$("#fs");i.focus();i.setSelectionRange(99,99)}}
+
+function newGame(w,b,rated){const x=u=>P[u]||{n:"Player",elo:1200};
+ return{w,b,wn:x(w).n,bn:x(b).n,wE:x(w).elo,bE:x(b).elo,bd:START,t:"w",c:"KQkq",e:-1,lm:[],st:"active",res:null,rated,ts:Date.now()}}
+async function mk(opp,rated){const w=Math.random()<.5,id=Math.random().toString(36).slice(2,10);
+ await gr.doc(id).set(newGame(w?me:opp,w?opp:me,rated));return id}
+function open(id){if(unsub)unsub();clearInterval(qt);if(qs){qs=null;qr.doc(me).delete().catch(()=>{})}
+ gref=gr.doc(id);dl=null;unsub=gref.onSnapshot(s=>{if(!s.exists)return;G={...s.data(),id};R();fin()})}
+async function mv(a,b){const S=toS(G),N=ap(S,[a,b]);let st="active",res=null;if(G.bot&&S.t==="w")learn(S,a,b);
+ if(!legal(N).length){st="done";res=att(N.b,N.b.indexOf(N.t==="w"?"K":"k"),S.t)?S.t:"d"}
+ const up={bd:N.b.join(""),t:N.t,c:N.c,e:N.e,lm:[a,b],st,res};Object.assign(G,up);sel=null;R();
+ if(G.bot){if(st==="done"){if(G.plc)place();return R()}setTimeout(bot,450)}else{await gref.update(up);fin()}}
+const lvl=a=>Math.max(400,Math.min(2000,2100-13*a));
+function ev(S){let s=0;for(let i=0;i<64;i++){const p=S.b[i];if(p===".")continue;const u=p.toLowerCase(),r=i>>3,f=i&7,v=VAL[u]*100+(u==="k"?0:6-Math.abs(r-3.5)-Math.abs(f-3.5));s+=col(p)===S.t?v:-v}return s}
+function nm(S,d,a=-1e5,b=1e5){if(!d)return ev(S);const L=legal(S);if(!L.length)return att(S.b,S.b.indexOf(S.t==="w"?"K":"k"),S.t==="w"?"b":"w")?-9e3-d:0;
+ L.sort((x,y)=>(S.b[y[1]]!==".")-(S.b[x[1]]!=="."));
+ for(const m of L){const s=-nm(ap(S,m),d-1,-b,-a);if(s>a)a=s;if(a>=b)break}return a}
+const roots=(S,d)=>legal(S).map(m=>[m,-nm(ap(S,m),d)]);
+function learn(S,a,b){let best=-1e5,mine=0;for(const[m,s]of roots(S,1)){if(s>best)best=s;if(m[0]===a&&m[1]===b)mine=s}
+ G.ls.push(Math.min(500,best-mine));const c=G.ls.reduce((x,y)=>x+y,0)/G.ls.length;G.bl=Math.round((G.bl+lvl(c))/2);G.bE=G.bl}
+async function place(){if(G.pd)return;G.pd=1;const n=G.ls.length,c=n?G.ls.reduce((x,y)=>x+y,0)/n:150;
+ const s=G.res==="w"?1:G.res==="b"?0:.5,e=Math.max(400,Math.min(2200,Math.round(G.bl+40*(s-.5))));G.pe=e;await pr.doc(me).update({elo:e,pl:1,w:s===1?1:0,l:s===0?1:0,d:s===.5?1:0});R()}
+function bot(){if(!G||!G.bot||G.st!=="active"||G.t!=="b")return;const S=toS(G),l=G.bl,d=l<700?0:l<1300?1:2,n=Math.max(0,1800-l)/3;
+ let best=-1e9,pick;for(const[m,s]of roots(S,d)){const x=s+(Math.random()*2-1)*n;if(x>best){best=x;pick=m}}
+ if(pick)mv(pick[0],pick[1])}
+function oldbot(){if(!G||!G.bot||G.st!=="active"||G.t!=="b")return;const S=toS(G);let best=-99,pick;
+ for(const x of legal(S)){const N=ap(S,x),cp=S.b[x[1]]==="."?0:VAL[S.b[x[1]].toLowerCase()];
+  let sc=cp+Math.random();if(att(N.b,x[1],N.t))sc-=VAL[S.b[x[0]].toLowerCase()];
+  if(!legal(N).length&&att(N.b,N.b.indexOf("K"),"b"))sc+=100;if(sc>best){best=sc;pick=x}}
+ if(pick)mv(pick[0],pick[1])}
+async function fin(){const g=G;if(!g||g.st!=="done"||g.bot||!g.rated||g["u_"+me]||applied.has(g.id))return;applied.add(g.id);
+ const mc=g.w===me?"w":"b",my=mc==="w"?g.wE:g.bE,oe=mc==="w"?g.bE:g.wE,s=g.res==="d"?.5:g.res===mc?1:0;
+ const p=P[me],K=(p.w||0)+(p.l||0)+(p.d||0)<30?40:my>=2400?10:20,ne=Math.max(100,Math.round(my+K*(s-1/(1+10**((oe-my)/400)))));dl=ne-my;
+ await pr.doc(me).update({elo:ne,w:(p.w||0)+(s===1?1:0),l:(p.l||0)+(s===0?1:0),d:(p.d||0)+(s===.5?1:0)});
+ await gref.update({["u_"+me]:1});R()}
+async function tick(){if(!qs)return;try{await qr.doc(me).update({ts:Date.now()})}catch(e){}
+ const now=Date.now(),w=100+(now-qs.t0)/1000*12,my=P[me].elo;
+ const c=Object.entries(Q).filter(([u,x])=>u>me&&x.ts>now-9000&&Math.abs(x.elo-my)<=w).sort((a,b)=>Math.abs(a[1].elo-my)-Math.abs(b[1].elo-my))[0];
+ if(c){clearInterval(qt);qs=null;qr.doc(me).delete().catch(()=>{});open(await mk(c[0],true))}}
+
+const A={
+ sq(v){v=+v;if(!G||G.st!=="active")return;const mc=G.b===me?"b":"w";if(G.t!==mc||(G.bot&&mc!=="w"))return;
+  const S=toS(G),p=S.b[v];
+  if(sel!=null&&legal(S).some(x=>x[0]===sel&&x[1]===v))return mv(sel,v);
+  sel=p!=="."&&col(p)===mc?v:null;R()},
+ tab(v){tab=v;R()},
+ async play(){qs={t0:Date.now()};R();await qr.doc(me).set({elo:P[me].elo,ts:Date.now(),n:P[me].n});qt=setInterval(tick,2000)},
+ cancel(){clearInterval(qt);qs=null;qr.doc(me).delete();R()},
+ bot(v){const p=P[me],plc=v==="1",l=plc||!p.pl?800:p.elo;dl=null;G={bot:1,plc,ls:[],bl:l,id:"bot",w:me,b:"bot",wn:p.n,bn:"Computer",wE:p.pl?p.elo:"?",bE:l,bd:START,t:"w",c:"KQkq",e:-1,lm:[],st:"active",res:null,rated:false};sel=null;R()},
+ async resign(){if(G.bot){G.st="done";G.res="b";G.rs="resign";if(G.plc)place();R()}else await gref.update({st:"done",res:G.b===me?"w":"b",rs:"resign"})},
+ lobby(){if(unsub)unsub();unsub=null;G=null;gref=null;sel=null;dl=null;R()},
+ async add(u){await pr.doc(me).update({f:[...(P[me].f||[]),u]})},
+ async rm(u){await pr.doc(me).update({f:(P[me].f||[]).filter(x=>x!==u)})},
+ async chal(u){await db.collection("challenges").doc(u).set({from:me,fn:P[me].n,ts:Date.now()});T("Challenge sent")},
+ async acc(){const id=await mk(ch.from,false);await db.collection("challenges").doc(me).delete();open(id)},
+ dec(){db.collection("challenges").doc(me).delete()},
+ async signup(){const u=($("#au")?.value||"").trim(),pw=$("#ap")?.value||"";aU=u;
+  if(!/^[A-Za-z0-9_]{3,16}$/.test(u))return setErr("Username must be 3–16 letters, numbers or underscores");
+  if(pw.length<6)return setErr("Password must be at least 6 characters");
+  if(Object.entries(P).some(([k,x])=>k!==me&&(x.n||"").toLowerCase()===u.toLowerCase()))return setErr("That username is taken");
+  const s=crypto.randomUUID(),h=await hp(pw,s);
+  await db.collection("data/users/"+me).doc("auth").set({u,s,h});await pr.doc(me).update({n:u});
+  acct={u,s,h};authed=true;aerr="";R()},
+ async login(){const pw=$("#ap")?.value||"";if(await hp(pw,acct.s)!==acct.h)return setErr("Wrong password");authed=true;aerr="";R()},
+ logout(){if(qs){clearInterval(qt);qs=null;qr.doc(me).delete().catch(()=>{})}if(unsub)unsub();unsub=null;G=null;gref=null;sel=null;authed=false;aerr="";R()}};
+document.addEventListener("click",e=>{const t=e.target.closest("[data-a]");if(t)A[t.dataset.a]?.(t.dataset.v)});
+document.addEventListener("input",e=>{if(e.target.id==="fs")R()});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.id==="ap")A[acct?"login":"signup"]()});
+
+(async()=>{
+ try{
+  const C=window.claude;if(!C){boot="Open this page from claude.ai to play.";return R()}
+  const [d,u,r]=await Promise.all([C.use("db"),C.use("user"),C.use("room")]);db=d;room=r;
+  if(!db||!u){boot="Please sign in to claude.ai to play. Your claude.ai account is your Knightly login.";return R()}
+  const prof=await u.me();me=await u.id();if(!me){boot="Please sign in to claude.ai to play.";me=null;return R()}
+  pr=db.collection("players");qr=db.collection("queue");gr=db.collection("games");
+  const d0=await pr.doc(me).get(),nm=prof.name||"Player";
+  if(!d0.exists)await pr.doc(me).set({n:nm,elo:0,pl:0,w:0,l:0,d:0,f:[]});
+  pr.onSnapshot(s=>{P={};s.docs.forEach(x=>P[x.id]=x.data());R()});
+  qr.onSnapshot(s=>{Q={};s.docs.forEach(x=>Q[x.id]=x.data())});
+  try{const c=await db.collection("data/users/"+me).doc("auth").get();acct=c.exists?c.data():null}catch(e){acct=null}
+  R();
+  gr.where("st","==","active").onSnapshot(s=>{if(G)return;const x=s.docs.find(y=>{const v=y.data();return(v.w===me||v.b===me)&&Date.now()-v.ts<216e5});if(x)open(x.id)});
+  db.collection("challenges").doc(me).onSnapshot(s=>{const v=s.exists?s.data():null;ch=v&&Date.now()-v.ts<12e4?v:null;R()});
+  if(room){room.presence({u:me});room.onPeers(c=>{online=new Set(c.peers.map(p=>p.presence.u));R()})}
+  R();
+ }catch(e){boot="Could not connect: "+esc(e.code||e.message);R()}
+})();
+R();
+</script></body></html>
